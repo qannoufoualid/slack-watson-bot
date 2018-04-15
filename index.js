@@ -1,13 +1,14 @@
 require('dotenv').load();
 
-const URL_XKCD_API = "https://xkcd.com/info.0.json";
+const PRODUCER_API_URL = "http://localhost:8080/kafka-rest-json-producer/api/produce";
 
 var Client = require('node-rest-client').Client;
- 
 var client = new Client();
 
 var Botkit = require('botkit');
 var express = require('express');
+var bodyParser = require('body-parser')
+
 var middleware = require('botkit-middleware-watson')({
   username: process.env.CONVERSATION_USERNAME,
   password: process.env.CONVERSATION_PASSWORD,
@@ -15,7 +16,7 @@ var middleware = require('botkit-middleware-watson')({
   url: process.env.CONVERSATION_URL || 'https://gateway.watsonplatform.net/conversation/api',
   version_date: '2017-05-26'
 });
-
+var users = [];
 // Configure your bot.
 var slackController = Botkit.slackbot();
 var slackBot = slackController.spawn({
@@ -24,31 +25,37 @@ var slackBot = slackController.spawn({
 
 slackController.hears(['.*'], ['direct_message', 'direct_mention', 'mention'], function(bot, message) {
   slackController.log('Slack message received');
+  users.push(message.user);
   middleware.interpret(bot, message, function() {
     if (message.watsonError) {
       console.log(message.watsonError);
       bot.reply(message, message.watsonError.description || message.watsonError.error);
     } else if (message.watsonData && 'output' in message.watsonData) {
   
-      if(message.watsonData.output.text[0]==="Here is the last webcomic"){
-            client.get(URL_XKCD_API, function (data, response) {
+      bot.reply(message, message.watsonData.output.text.join('\n'));
 
-                bot.reply(message, {
-                    attachments:[
-                            {
-                            "title": "Last Webcomic",
-                            "image_url": data.img,
-                        }
-                    ]
-                });
-             });
+      if(message.watsonData.output.action === "all_employees"){
+            var employee_id = message.watsonData.employee_id;
+
+            // set content-type header and data as json in args parameter 
+            var args = {
+                data: {
+                  "url" : "http://localhost:5000/querydone",
+                  "action" : "all_employees",
+                  "client_id" : message.user
+                },
+                headers: { "Content-Type": "application/json" }
+            };
+             
+            client.post(PRODUCER_API_URL, args, function (data, response) {
+                // parsed response body as js object 
+                console.log(data);
+            });
+
+             console.log("message sent to producer");
       }
 
-      bot.api.channels.list({'exclude_archived' : 1}, function (err, res) {
-          console.log(res);
-      s});
-
-      bot.reply(message, message.watsonData.output.text.join('\n'));
+      
     } else {
       console.log('Error: received message in unknown format. (Is your connection with Watson Conversation up and running?)');
       bot.reply(message, "I'm sorry, but for technical reasons I can't respond to your message");
@@ -74,15 +81,18 @@ function sendMessageToUser(message, user){
 
 // Create an Express app
 var app = express();
+app.use( bodyParser.json() );
 
 var port = process.env.PORT || 5000;
 app.set('port', port);
 
 app.post("/querydone", function (req, res) {
 
-      //TODO parse res
+      console.log("inside querydone");
+      console.log(req.body);
+      
+      sendMessageToUser(req.body.response, req.body.client_id);
 
-      console.log("Working");
       res.send("Thank you kafka system");
 });
 
