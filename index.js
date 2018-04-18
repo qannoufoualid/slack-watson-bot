@@ -66,16 +66,15 @@ slackController.hears(['.*'], ['direct_message', 'direct_mention', 'mention'], f
 
 slackBot.startRTM();
 
-sendMessageToUser("Hello Vincent im here",'UA4EMBP39');
 
 function sendMessageToUser(message, user){
 
   slackBot.startPrivateConversation({ user: user }, function(err,dm) {
+    console.error(user);
       dm.say(message);
   });
 
 }
-
 
 
 
